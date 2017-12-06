@@ -1,0 +1,63 @@
+
+
+Objetivo:
+criar um Pf port knocking permitir acesso ssh && dificultar descoberta serviço remoto sshd.
+ 
+como é meu firewall preferido :D vamos de PF, mas pode aplicar em outros firewalls que funcionara "like a charm" 
+
+esta é uma tecnica muito auxiliar para a segurança, embora "driblar" a mesma não vem sendo uma tarefa tão dificil,
+claro tem seus auxiliadores para isso.. como por ex: falhas de sistemas, falhas em serviços de rede, falhas de programção do sistema,
+falhas em softwares mas enfim esse não é o topico do assunto :/ e pode ficar pra uma proximo relato.
+
+vamos começar batendo em uma sequencia de portas (acho que 3 esta bom para entendermos como funciona) ping na 33333 depois 12345,
+ e por ultimo na porta 35215,
+bom, e o que acontecera depois disso? nesse caso vamos abrir a porta ssh e autenticar uma conexao remota.
+muitos vão em sshd.conf e mudam a porta de entrada padrao do ssh por ex: para a porta 2222 (ja que muitos ensinam assim) e "novatos" 
+acham interessante e mudam para essa porta, mas fazendo isso não estará dificultando muito, na verdade quase nada ehhehe.
+
+a porta SSH é muito procurada e existem varias formas de acha-la disponivel por aih, então vamos dificultar um pouquinho,
+alem do + vamos obrigar o ip a bater 2X na porta 12345 
+
+
+## Pf Port Knocking 
+# entao para começar vamos criando uma tabela de variavel tipo persistente.
+# depois uma variavel ExtIf que sera interface externa
+# as variaveis $portknock1 $portknock2 $portknock3 que serao nossas portas
+#### As portas
+# serão ultillizadas essas 3 portas
+  portknock1=33333
+  portknock2=12345
+  portknock3=35215
+
+## vamos criar 3 tabelas persistentes ###
+# qlqer ip que bater nessas sequencialmente nessas portas sera armazenado e
+# estara permitido para acessar a porta 22 a logica é simples mas com alguns recursos do firewall fica interessante 
+
+
+  table <portknock1> persist
+  table <portknock2> persist
+  table <portknock3> persist
+
+### vamos filtrar quem tem interesse/convite para chegar na 22 ###
+# No Pf vamos usar o synproxy para manter o estado atual da porta. depois adicionamos o ip para um overload
+# se vc não sabe Overload é quando temos algo que é usado para mais de uma função 
+# se um ip bater corretamente nas porta da table ele etara liberado para uma conexao na porta 22, aquela que é convem esconder e muitos casos. 
+
+ pass in on $ExtIf inet proto tcp from any to $ExtIf port $portknock1 synproxy state (max-src-conn 1, overload <portknock1>)
+ pass in on $ExtIf inet proto tcp from <portknock1> to $ExtIf port $portknock2 synproxy state (max-src-conn 2, overload <portknock2>)
+ pass in on $ExtIf inet proto tcp from <portknock2> to $ExtIf port $portknock3 synproxy state (max-src-conn 1, overload <portknock3>)
+
+# Com essas regras acima nosso querido sshd daemon confiavelemente libera a porta ssh padrao para nosso ip se conectar 
+ pass in on $ExtIf inet proto tcp from <portknock3> to $ExtIf port ssh
+ 
+#ok tudo pronto certo? acho que não mas vamos partes
+# vamos recapitular o ip bate na knock1 entao o synproxy mantem o estado do pacote
+# o max-src-conn garante que so podera bater um vez entao entra o overload e mantem o ip para seguir na seguinte regra
+# se o mesmo ip continuar a sequencia o synproxy e o max-src-conn e o overload mantera seu papel mas dessa vz o max-src-conn so prossegue se o ip bater 2x
+# sendo assim caso tudo seja TRUE ate aqui passa para a terceira e ultima regra da table  
+
+bom ja tratamos dos ip, da conexao ssh mas e agora nossas portas como ficarao?
+ 
+vamos criar um tempo pra essas porta ficarem disponiveis mas isso ficara pra outro dia :D
+ 
+ thanks to calomel.org and OpenBSD.org 
